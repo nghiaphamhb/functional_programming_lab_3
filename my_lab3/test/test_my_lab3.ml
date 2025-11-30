@@ -55,3 +55,70 @@ let test_newton_x2 () =
       Alcotest.check float_eps "Newton x^2" y_expected y)
     cases
 
+(* ===== Test 3: small pure streaming simulation for linear ===== *)
+
+(* We simulate the behavior of run_linear in a pure way:
+   - No stdin/stdout, only functions and lists.
+   - Given a list of input points and a step,
+     we produce the list of (x, y) points that would be printed. *)
+
+let simulate_linear_stream ~step (points : Point.t list) : (float * float) list
+    =
+  let module L = Linear in
+  (* Internal state:
+     prev  : previous point in the sliding window (option)
+     curr  : current point in the sliding window (option)
+     next_x: next x from which we will start/continue sampling (option)
+     acc   : accumulator of produced (x, y) results in reverse order
+   *)
+  let rec feed_points prev curr next_x acc pts =
+    match pts with
+    | [] ->
+        (* No more input points: return accumulated results in correct order *)
+        List.rev acc
+    | p :: rest -> (
+        (* Update the sliding window of size 2: (prev', curr') *)
+        let prev', curr' =
+          match (prev, curr) with
+          | None, None -> (Some p, None)
+          | Some prev0, None -> (Some prev0, Some p)
+          | Some _prev0, Some curr0 -> (Some curr0, Some p)
+          | None, Some _ -> failwith "invalid state"
+        in
+        match (prev', curr') with
+        | Some prevp, Some currp ->
+            (* We have two points: interpolate between prevp.x and currp.x *)
+            let start_x =
+              match next_x with
+              | None -> prevp.x (* first time on this segment *)
+              | Some x -> x (* continue from previous position *)
+            in
+            (* produce: iteratively generate (x, y) pairs on the segment
+               [start_x, currp.x] with step "step". Returns:
+               - next_x' : the x value just past currp.x
+               - acc'    : updated accumulator with newly generated points
+             *)
+            let rec produce x acc =
+              if x > currp.x then (x, acc)
+              else
+                let y = L.eval [ prevp; currp ] x in
+                produce (x +. step) ((x, y) :: acc)
+            in
+            let next_x', acc' = produce start_x acc in
+            (* Recurse with updated state and remaining input points *)
+            feed_points prev' curr' (Some next_x') acc' rest
+        | _ ->
+            (* Not enough points to interpolate yet, continue reading input *)
+            feed_points prev' curr next_x acc rest)
+  in
+  feed_points None None None [] points
+
+(* Test that simulate_linear_stream reproduces the expected sequence
+   of (x, y) points for a simple y = x case. *)
+let test_linear_stream () =
+  let points = [ p 0. 0.; p 1. 1.; p 2. 2. ] in
+  let result = simulate_linear_stream ~step:0.5 points in
+  let expected = [ (0., 0.); (0.5, 0.5); (1., 1.); (1.5, 1.5); (2., 2.) ] in
+  Alcotest.(check (list (pair float_eps float_eps)))
+    "linear streaming" expected result
+
