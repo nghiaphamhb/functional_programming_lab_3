@@ -393,3 +393,22 @@ let run_both ~step ~n =
   (* Initial call: empty window, no next_x *)
   loop [] None
 
+(* ========= Main ========= *)
+let () =
+  let cfg =
+    try get_config ()
+    with Failure msg ->
+      prerr_endline ("Argument error: " ^ msg);
+      exit 1
+  in
+  if (not cfg.use_linear) && not cfg.use_newton then (
+    prerr_endline
+      "Error: choose at least one algorithm: --linear and/or --newton";
+    exit 1);
+  (* dune exec -- my_lab3 --linear --newton --step 0.5 -n 4 *)
+  if cfg.use_linear && cfg.use_newton then
+    run_both ~step:cfg.step ~n:cfg.newton_n
+    (* dune exec -- my_lab3 --newton --step 0.5 -n 4 *)
+  else if cfg.use_newton then run_newton ~step:cfg.step ~n:cfg.newton_n
+  (* dune exec -- my_lab3 --linear --step 0.5 *)
+    else run_linear ~step:cfg.step
