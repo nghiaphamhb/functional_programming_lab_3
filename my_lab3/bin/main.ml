@@ -86,3 +86,86 @@ let parse_line (line : string) : Point.t option =
 (** function prints result print_result : string -> float -> float -> unit *)
 let print_result algo_name x y = Printf.printf "> %s: %g %g\n%!" algo_name x y
 
+(** streaming linear interpolation:
+    + Infinite loop reading lines from stdin.
+    + Each line is parsed into a point (x, y).
+    + Keep a sliding window of 2 most recent points (prev_point, curr_point).
+    + When we have 2 points, interpolate from prev_point.x to curr_point.x with
+      the given step.
+    + Print results to stdout.
+    + Then read next point, slide the window, and repeat. run_linear :
+      step:float -> unit *)
+let run_linear ~step =
+  let module A = Linear in
+  (* tail-recursive loop:
+     prev_point : previous point in the window (or None)
+     curr_point : current point in the window (or None)
+     next_x_opt : next x at which we should start interpolating
+   *)
+  let rec loop prev_point curr_point next_x_opt =
+    match input_line stdin with
+    (* Successfully read one line from stdin *)
+    | line -> (
+        (* Try to parse line into a point (x, y) *)
+        match parse_line line with
+        | None ->
+            (* Invalid or empty line: skip and continue with the same state *)
+            loop prev_point curr_point next_x_opt
+        | Some p -> (
+            (* Update the sliding window with the new point p *)
+            let prev', curr' =
+              match (prev_point, curr_point) with
+              | None, None ->
+                  (* First point: window has only the new point p *)
+                  (Some p, None)
+              | Some prev, None ->
+                  (* Second point: now window has (prev, p) *)
+                  (Some prev, Some p)
+              | Some _prev, Some curr ->
+                  (* More points: slide window forward: (curr, p) *)
+                  (Some curr, Some p)
+              | None, Some _ ->
+                  (* This state should never happen if logic is correct *)
+                  failwith "Invalid state"
+            in
+            (* If we have 2 points in the window, perform interpolation *)
+            match (prev', curr') with
+            | Some prev, Some curr ->
+                (* Determine the starting x for interpolation:
+                     - if we never interpolated in this segment: start at prev.x
+                     - otherwise: resume from the previously stored next_x
+                   *)
+                let start_x =
+                  match next_x_opt with None -> prev.x | Some x -> x
+                in
+                (* Produce interpolated points from start_x up to curr.x
+                     with the given step. Returns the last x used (just past curr.x).
+                   *)
+                let rec produce x =
+                  if x > curr.x then
+                    (* Stop when x goes beyond the current segment *)
+                    x
+                  else
+                    (* Interpolate at x using the two points [prev; curr] *)
+                    let y = A.eval [ prev; curr ] x in
+                    (* Print result in the required "algo_name: x y" format *)
+                    print_result A.name x y;
+                    (* Move to the next sample point *)
+                    produce (x +. step)
+                in
+                (* Store the next x from which to continue in the next iteration *)
+                let next_x' = Some (produce start_x) in
+                (* Recurse with updated window and next_x *)
+                loop prev' curr' next_x'
+            | _ ->
+                (* Not enough points yet (we only have 0 or 1 point),
+                     just continue reading input.
+                   *)
+                loop prev' curr' next_x_opt))
+    | exception End_of_file ->
+        (* End of input: stop the loop *)
+        ()
+  in
+  (* Initial call: no points, no next_x *)
+  loop None None None
+
