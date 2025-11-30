@@ -187,3 +187,96 @@ let last_two lst =
   | a :: b :: _ -> Some (b, a) (* take b first *)
   | _ -> None
 
+(** streaming Newton interpolation with sliding window of n points:
+
+    + Infinite loop reading lines from stdin.
+    + Each line is parsed into a point (x, y).
+    + Keep a sliding window "window" of the last at most n points.
+    + When we have at least n points in the window:
+
+    - Define an x-interval [x_min, x_max] based on the window.
+    - For x from start_x to x_max, with step "step", evaluate the Newton
+      interpolating polynomial built from the n points.
+    - Print results to stdout.
+
+    + Then read the next point, slide the window, and repeat. run_newton :
+      step:float -> n:int -> unit *)
+let run_newton ~step ~n =
+  (* Alias for the Newton interpolation module *)
+  let module A = Newton in
+  (* tail-recursive loop:
+     window     : list of recent points (kept to at most n points)
+     next_x_opt : next x from which we should continue interpolation
+   *)
+  let rec loop window next_x_opt =
+    match input_line stdin with
+    (* Successfully read one line from stdin *)
+    | line -> (
+        (* Try to parse the line into a point (x, y) *)
+        match parse_line line with
+        | None ->
+            (* Invalid or empty line: ignore and keep the same state *)
+            loop window next_x_opt
+        | Some p ->
+            (* Add the new point p to the window, 
+                 then trim so that we keep at most n last points. *)
+            let window' =
+              window
+              |> append_one p (* append at the end *)
+              |> trim_last_k n (* keep only the last n points *)
+            in
+            (* If we have at least n points, we can interpolate *)
+            if List.length window' >= n then
+              (* Determine starting x:
+                   - If this is the first time we interpolate in this window,
+                     start at the smallest x in the window (x of the first point).
+                   - Otherwise, continue from the previously stored next_x.
+                 *)
+              let start_x =
+                match next_x_opt with
+                | None -> (
+                    (* start from x of the first point in the window *)
+                    match window' with
+                    | [] -> p.x (* should not happen if length >= n *)
+                    | first :: _ -> first.x)
+                | Some x -> x
+              in
+              (* x_max is the x-coordinate of the last point in the window
+                   (i.e., the right boundary of the interpolation interval). *)
+              let x_max =
+                match List.rev window' with
+                | [] -> p.x (* should not happen if length >= n *)
+                | last :: _ -> last.x
+              in
+              (* Produce interpolated points on [start_x, x_max]
+                   with the given step, using Newton interpolation on n points. *)
+              let rec produce x =
+                if x > x_max then
+                  (* Stop when x goes past the current window interval *)
+                  x
+                else
+                  (* Evaluate Newton polynomial of degree (n-1) at x,
+                       using the n points in window'. *)
+                  let y = A.eval_n n window' x in
+                  (* Print result in "algo_name: x y" format *)
+                  print_result A.name x y;
+                  (* Move to the next sample point *)
+                  produce (x +. step)
+              in
+              (* Store the next x from which we should continue
+                   the next time we enter this window. *)
+              let next_x' = Some (produce start_x) in
+              (* Recurse with updated window and next_x *)
+              loop window' next_x'
+            else
+              (* Not enough points yet (we have less than n),
+                   so we cannot build a Newton interpolating polynomial.
+                   Just continue reading input. *)
+              loop window' next_x_opt)
+    | exception End_of_file ->
+        (* End of input: stop the loop *)
+        ()
+  in
+  (* Initial call: empty window, no next_x yet *)
+  loop [] None
+
