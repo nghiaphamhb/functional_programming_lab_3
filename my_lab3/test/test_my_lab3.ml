@@ -38,3 +38,20 @@ let test_linear_shifted () =
       Alcotest.check float_eps "y = 2x+1" y_expected y)
     cases
 
+(* ===== Test 2: Newton.eval_n on y = x^2 ===== *)
+
+(* Test that Newton.eval_n with 4 points on y = x^2
+   reconstructs the polynomial exactly (within epsilon). *)
+let test_newton_x2 () =
+  let module N = Newton in
+  (* Sample points on y = x^2 *)
+  let pts = [ p 0. 0.; p 1. 1.; p 2. 4.; p 3. 9. ] in
+  (* A set of x values where we will test the interpolating polynomial *)
+  let cases = [ 0.; 0.5; 1.; 1.5; 2.; 2.5; 3. ] in
+  List.iter
+    (fun x ->
+      let y = N.eval_n 4 pts x in
+      let y_expected = x *. x in
+      Alcotest.check float_eps "Newton x^2" y_expected y)
+    cases
+
