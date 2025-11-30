@@ -1,0 +1,68 @@
+name: OCaml CI - My_lab3
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) Lấy code về
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2) Setup OCaml + dune
+      - name: Setup OCaml environment
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: '4.14.0'
+          dune-cache: true
+
+      # 3) Cài công cụ & thư viện cần cho bài này
+      # (dune để build, alcotest + qcheck để test, ocamlformat optional nếu muốn check format)
+      - name: Install OCaml tools and libraries
+        run: |
+          opam update
+          opam install -y dune alcotest ocamlformat.0.27.0
+
+      # 4) Build (lint cơ bản qua cảnh báo compiler)
+      # Làm trong thư mục dự án OA Set
+      - name: Build (dev profile)
+        working-directory: my_lab3
+        run: |
+          eval $(opam env)
+          echo "Building project..."
+          dune build --profile dev
+
+      # 5) (Optional) Kiểm tra format OCaml
+      - name: Format check
+        working-directory: my_lab3
+        run: |
+          eval $(opam env)
+          echo "Checking code formatting..."
+          ocamlformat --version
+          files="$(git ls-files -- '*.ml' '*.mli')"
+          if [ -z "$files" ]; then
+            echo "No OCaml files to format."
+            exit 0
+          fi
+          failed=0
+          for f in $files; do
+            if ! ocamlformat --check "$f"; then
+              echo "Not formatted: $f"
+              failed=1
+            fi
+          done
+          exit $failed
+
+      # 6) Chạy test (Alcotest + QCheck)
+      - name: Run tests
+        working-directory: my_lab3
+        run: |
+          eval $(opam env)
+          echo "Running tests..."
+          dune runtest
