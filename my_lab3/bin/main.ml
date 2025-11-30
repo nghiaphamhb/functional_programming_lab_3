@@ -280,3 +280,116 @@ let run_newton ~step ~n =
   (* Initial call: empty window, no next_x yet *)
   loop [] None
 
+(** streaming both Linear and Newton interpolation on the same input stream:
+
+    + Infinite loop reading lines from stdin.
+    + Each line is parsed into a point (x, y).
+    + Keep a sliding window "window" of the last at most n points.
+    + For each x in the current interval:
+
+    - Always try to compute Linear interpolation using the last two points.
+    - Additionally, if we have at least n points, compute Newton interpolation
+      on the whole window of n points.
+
+    + Print both results (Linear + Newton) to stdout when applicable. run_both :
+      step:float -> n:int -> unit *)
+let run_both ~step ~n =
+  (* Aliases for the two interpolation modules *)
+  let module L = Linear in
+  let module N = Newton in
+  (* tail-recursive loop:
+     window     : list of recent points (up to n points)
+     next_x_opt : next x from which to continue sampling
+   *)
+  let rec loop window next_x_opt =
+    match input_line stdin with
+    (* Successfully read one line from stdin *)
+    | line -> (
+        match parse_line line with
+        | None ->
+            (* Empty line / parse error – skip this line and keep state *)
+            loop window next_x_opt
+        | Some p ->
+            (* Update the sliding window: append p and keep at most n points *)
+            let window' = window |> append_one p |> trim_last_k n in
+            let len = List.length window' in
+
+            (* Only process when we have at least 2 points (Linear needs 2) *)
+            if len >= 2 then
+              (* Determine starting x:
+                   - If this is the first time in this window, start from
+                     the x of the first point in the window.
+                   - Otherwise, resume from the previously stored next_x.
+                 *)
+              let start_x =
+                match next_x_opt with
+                | None -> (
+                    (* Start from x of the first point in the window *)
+                    match window' with
+                    | [] -> p.x (* should not happen if len >= 2 *)
+                    | first :: _ -> first.x)
+                | Some x -> x
+              in
+              (* x_max: x-coordinate of the last point in the window
+                   (right boundary of the current segment). *)
+              let x_max =
+                match List.rev window' with
+                | [] -> p.x (* should not happen if len >= 2 *)
+                | last :: _ -> last.x
+              in
+
+              (* Precompute some helpers for the produce loop *)
+              let last2 = last_two window' in
+              let has_newton = len >= n in
+              let first_x =
+                match window' with [] -> p.x | first :: _ -> first.x
+              in
+
+              (* Produce both Linear and Newton results on [start_x, x_max]
+                   with step "step". For each x:
+                     - Linear interpolation uses only the last two points.
+                     - Newton interpolation (if available) uses all n points
+                       in the current window.
+                 *)
+              let rec produce x =
+                if x > x_max then
+                  (* Stop when x is beyond the current interval *)
+                  x
+                else (
+                  (* ----- Linear interpolation part ----- *)
+                  (* Use the segment formed by the last two points in the window *)
+                  (match last2 with
+                  | Some (p1, p2) when x >= p1.x && x <= p2.x ->
+                      let y_lin = L.eval [ p1; p2 ] x in
+                      print_result L.name x y_lin
+                  | _ ->
+                      (* Either we don't have two points, or x is outside
+                            the last segment: do nothing for Linear. *)
+                      ());
+
+                  (* ----- Newton interpolation part ----- *)
+                  (* If we have at least n points, and x is within [first_x, x_max],
+                       evaluate the Newton interpolant on the full window. *)
+                  (if has_newton && x >= first_x && x <= x_max then
+                     let y_new = N.eval_n n window' x in
+                     print_result N.name x y_new);
+
+                  (* Move to the next sample point *)
+                  produce (x +. step))
+              in
+
+              (* Compute new next_x to continue from next time *)
+              let next_x' = Some (produce start_x) in
+              (* Recurse with updated window and next_x *)
+              loop window' next_x'
+            else
+              (* Not enough points (less than 2) to do Linear or Newton,
+                   just continue reading input. *)
+              loop window' next_x_opt)
+    | exception End_of_file ->
+        (* End of input: stop the loop *)
+        ()
+  in
+  (* Initial call: empty window, no next_x *)
+  loop [] None
+
