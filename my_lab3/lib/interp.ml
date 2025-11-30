@@ -24,3 +24,43 @@ module Linear : S = struct
     | _ -> invalid_arg "Linear.eval: need at least 2 points"
 end
 
+(* Newton interpolation (n points) ===== *)
+
+module Newton = struct
+  let name = "newton"
+
+  (* Get the first element k *)
+  let rec take k lst =
+    if k <= 0 then []
+    else match lst with [] -> [] | h :: t -> h :: take (k - 1) t
+
+  (* Attach index to list: [(0,p0); (1,p1); ...] *)
+  let with_index lst =
+    let rec aux i = function [] -> [] | h :: t -> (i, h) :: aux (i + 1) t in
+    aux 0 lst
+
+  (* Lagrange interpolation on first n points *)
+  let eval_n n pts x =
+    let pts_used = take n pts in
+    match pts_used with
+    | [] -> invalid_arg "Newton.eval_n: empty point list"
+    | _ ->
+        let indexed = with_index pts_used in
+        let rec outer acc = function
+          | [] -> acc
+          | (i, pi) :: rest ->
+              let xi = pi.x and yi = pi.y in
+              let num, den =
+                List.fold_left
+                  (fun (num, den) (j, pj) ->
+                    if i = j then (num, den)
+                    else
+                      let xj = pj.x in
+                      (num *. (x -. xj), den *. (xi -. xj)))
+                  (1., 1.) indexed
+              in
+              let li = num /. den in
+              outer (acc +. (yi *. li)) rest
+        in
+        outer 0. indexed
+end
