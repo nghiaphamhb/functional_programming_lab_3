@@ -169,3 +169,21 @@ let run_linear ~step =
   (* Initial call: no points, no next_x *)
   loop None None None
 
+(* Function add 1 element to the end of the list *)
+let append_one x lst = lst @ [ x ]
+
+(* Function cuts list to keep maximum k end element only *)
+let trim_last_k k lst =
+  let len = List.length lst in
+  let drop = len - k in
+  let rec drop_n n l =
+    if n <= 0 then l else match l with [] -> [] | _ :: t -> drop_n (n - 1) t
+  in
+  if drop <= 0 then lst else drop_n drop lst
+
+(* Function takes the last 2 elements of the list, if any *)
+let last_two lst =
+  match List.rev lst with
+  | a :: b :: _ -> Some (b, a) (* take b first *)
+  | _ -> None
+
