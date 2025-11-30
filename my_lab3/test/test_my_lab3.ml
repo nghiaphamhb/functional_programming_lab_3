@@ -122,3 +122,22 @@ let test_linear_stream () =
   Alcotest.(check (list (pair float_eps float_eps)))
     "linear streaming" expected result
 
+(* ===== Main ===== *)
+
+let () =
+  let open Alcotest in
+  (* run: main function of Alcotest test runner.
+     It takes a test suite name and a list of test groups. *)
+  run "my_lab3 tests"
+    [
+      (* Group of tests for linear interpolation *)
+      ( "linear",
+        [
+          test_case "simple y=x" `Quick test_linear_simple;
+          test_case "shifted line" `Quick test_linear_shifted;
+        ] );
+      (* Group of tests for Newton interpolation *)
+      ("newton", [ test_case "x^2 polynomial" `Quick test_newton_x2 ]);
+      (* Group of tests for streaming behavior (pure simulation) *)
+      ("stream", [ test_case "linear streaming mini" `Quick test_linear_stream ]);
+    ]
