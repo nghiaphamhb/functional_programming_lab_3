@@ -226,6 +226,7 @@ end
 
 #### Только линейная интерполяция
 ```ocaml
+(* bin/main.ml *)
 (** streaming linear interpolation:
     + Infinite loop reading lines from stdin.
     + Each line is parsed into a point (x, y).
@@ -312,6 +313,7 @@ let run_linear ~step =
 
 #### Только интерполяция Ньютона
 ```ocaml
+(* bin/main.ml *)
 (** streaming Newton interpolation with sliding window of n points:
 
     + Infinite loop reading lines from stdin.
@@ -408,6 +410,7 @@ let run_newton ~step ~n =
 
 #### Оба линейная интерполяция и интерполяция Ньютона
 ```ocaml
+(* bin/main.ml *)
 (** streaming both Linear and Newton interpolation on the same input stream:
 
     + Infinite loop reading lines from stdin.
@@ -525,6 +528,7 @@ let run_both ~step ~n =
 ### Helpers
 
 ```ocaml
+(* bin/main.ml *)
 (* Default parameters *)
 let default_config =
   { use_linear = false; use_newton = false; step = 0.5; newton_n = 4 }
@@ -623,8 +627,8 @@ let last_two lst =
 ### Как запустить?
 
 ```bash
-dune exec -- my_lab3 --newton --step 0.5 -n 4 *
-dune exec -- my_lab3 --linear --step 0.5 *
+dune exec -- my_lab3 --linear --step 0.5
+dune exec -- my_lab3 --newton --step 0.5 -n 4
 dune exec -- my_lab3 --linear --newton --step 0.5 -n 4
 dune test
 ```
@@ -646,6 +650,7 @@ dune test
 * работа на общем сдвинутом случае y = 2x + 1.
 
 ```ocaml
+(* test/test_my_lab3.ml *)
 let test_linear_simple () =
   let module L = Linear in
   let pts = [ p 0. 0.; p 2. 2. ] in
@@ -680,6 +685,7 @@ let test_linear_shifted () =
 * корректность значений между опорными точками.
 
 ```ocaml
+(* test/test_my_lab3.ml *)
 let test_newton_x2 () =
   let module N = Newton in
   let pts = [ p 0. 0.; p 1. 1.; p 2. 4.; p 3. 9. ] in
@@ -701,6 +707,7 @@ let test_newton_x2 () =
 * соответствие ожидаемой последовательности значений модели y = x.
 
 ```ocaml
+(* test/test_my_lab3.ml *)
 let test_linear_stream () =
   let points = [ p 0. 0.; p 1. 1.; p 2. 2. ] in
   let result = simulate_linear_stream ~step:0.5 points in
