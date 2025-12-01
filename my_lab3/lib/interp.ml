@@ -24,7 +24,7 @@ module Linear : S = struct
     | _ -> invalid_arg "Linear.eval: need at least 2 points"
 end
 
-(* Newton interpolation (n points) ===== *)
+(* Newton interpolation (n points) *)
 
 module Newton = struct
   let name = "newton"
