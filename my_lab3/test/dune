@@ -1,3 +1,4 @@
 (test
  (name test_my_lab3)
+ (modules test_my_lab3)
  (libraries my_lab3 alcotest))
