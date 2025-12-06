@@ -103,6 +103,9 @@ let run_linear ~step =
      next_x_opt : next x at which we should start interpolating
    *)
   let rec loop prev_point curr_point next_x_opt =
+    (* Print input prompt to stderr so it does not mix with algorithm output *)
+    output_string stderr "< ";
+    flush stderr;
     match input_line stdin with
     (* Successfully read one line from stdin *)
     | line -> (
@@ -209,6 +212,9 @@ let run_newton ~step ~n =
      next_x_opt : next x from which we should continue interpolation
    *)
   let rec loop window next_x_opt =
+    (* Print input prompt to stderr so it does not mix with algorithm output *)
+    output_string stderr "< ";
+    flush stderr;
     match input_line stdin with
     (* Successfully read one line from stdin *)
     | line -> (
@@ -302,6 +308,9 @@ let run_both ~step ~n =
      next_x_opt : next x from which to continue sampling
    *)
   let rec loop window next_x_opt =
+    (* Print input prompt to stderr so it does not mix with algorithm output *)
+    output_string stderr "< ";
+    flush stderr;
     match input_line stdin with
     (* Successfully read one line from stdin *)
     | line -> (
