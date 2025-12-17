@@ -191,10 +191,5 @@ let () =
     prerr_endline
       "Error: choose at least one algorithm: --linear and/or --newton";
     exit 1);
-  (* both algorithms  *)
-  if cfg.use_linear && cfg.use_newton then
-    run_both ~step:cfg.step ~n:cfg.newton_n ~use_linear:true ~use_newton:true
-    (* only newton *)
-  else if cfg.use_newton then run_newton ~step:cfg.step ~n:cfg.newton_n
-  (* only linear *)
-    else run_linear ~step:cfg.step
+  run_both ~step:cfg.step ~n:cfg.newton_n ~use_linear:cfg.use_linear
+    ~use_newton:cfg.use_newton
