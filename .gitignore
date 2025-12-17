@@ -18,3 +18,4 @@ _build/
 .DS_Store
 Thumbs.db
 my_lab3/my_lab3.opam
+my_lab3/data.txt
