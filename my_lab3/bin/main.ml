@@ -307,11 +307,12 @@ let run_newton ~step ~n =
 
     + Print both results (Linear + Newton) to stdout when applicable. run_both :
       step:float -> n:int -> unit *)
-let run_both ~step ~n =
+let run_both ~step ~n ~use_linear ~use_newton=
   let module L = Linear in
   let module N = Newton in
   let is_interactive = Unix.isatty Unix.stdin in
 
+  (* === Main logic: check and run algorithm === *)
   let rec loop window next_x_opt =
     if is_interactive then (
       output_string stderr "< ";
@@ -340,7 +341,7 @@ let run_both ~step ~n =
                 | [] -> p.x 
                 | last :: _ -> last.x
               in
-
+              (* === Choose algorithm by label === *)
               let last2 = last_two window' in
               let has_newton = len >= n in
               let first_x =
@@ -352,6 +353,7 @@ let run_both ~step ~n =
                   x
                 else (
                   (* ----- Linear interpolation part ----- *)
+                  if use_linear then
                   (match last2 with
                   | Some (p1, p2) when x >= p1.x && x <= p2.x ->
                       let y_lin = L.eval [ p1; p2 ] x in
@@ -360,13 +362,13 @@ let run_both ~step ~n =
                       ());
 
                   (* ----- Newton interpolation part ----- *)
-                  (if has_newton && x >= first_x && x <= x_max then
+                  (if use_newton && has_newton && x >= first_x && x <= x_max then
                      let y_new = N.eval_n n window' x in
                      print_result N.name x y_new);
 
                   produce (x +. step))
               in
-
+              (* Done the loop *)
               let next_x' = Some (produce start_x) in
               loop window' next_x'
             else
@@ -389,10 +391,10 @@ let () =
     prerr_endline
       "Error: choose at least one algorithm: --linear and/or --newton";
     exit 1);
-  (* dune exec -- my_lab3 --linear --newton --step 0.5 -n 4 *)
+  (* both algorithms  *)
   if cfg.use_linear && cfg.use_newton then
-    run_both ~step:cfg.step ~n:cfg.newton_n
-    (* dune exec -- my_lab3 --newton --step 0.5 -n 4 *)
+    run_both ~step:cfg.step ~n:cfg.newton_n ~use_linear:true ~use_newton:true
+    (* only newton *)
   else if cfg.use_newton then run_newton ~step:cfg.step ~n:cfg.newton_n
-  (* dune exec -- my_lab3 --linear --step 0.5 *)
+  (* only linear *)
     else run_linear ~step:cfg.step
