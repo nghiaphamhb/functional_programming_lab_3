@@ -97,6 +97,8 @@ let print_result algo_name x y = Printf.printf "> %s: %g %g\n%!" algo_name x y
       step:float -> unit *)
 let run_linear ~step =
   let module A = Linear in
+  (* Check if input is from a terminal (interactive) or from a pipe *)
+  let is_interactive = Unix.isatty Unix.stdin in
   (* tail-recursive loop:
      prev_point : previous point in the window (or None)
      curr_point : current point in the window (or None)
@@ -104,8 +106,9 @@ let run_linear ~step =
    *)
   let rec loop prev_point curr_point next_x_opt =
     (* Print input prompt to stderr so it does not mix with algorithm output *)
-    output_string stderr "< ";
-    flush stderr;
+    if is_interactive then (
+      output_string stderr "< ";
+      flush stderr);
     match input_line stdin with
     (* Successfully read one line from stdin *)
     | line -> (
@@ -207,14 +210,17 @@ let last_two lst =
 let run_newton ~step ~n =
   (* Alias for the Newton interpolation module *)
   let module A = Newton in
+  (* Check if input is from a terminal (interactive) or from a pipe *)
+  let is_interactive = Unix.isatty Unix.stdin in
   (* tail-recursive loop:
      window     : list of recent points (kept to at most n points)
      next_x_opt : next x from which we should continue interpolation
    *)
   let rec loop window next_x_opt =
     (* Print input prompt to stderr so it does not mix with algorithm output *)
-    output_string stderr "< ";
-    flush stderr;
+    if is_interactive then (
+      output_string stderr "< ";
+      flush stderr);
     match input_line stdin with
     (* Successfully read one line from stdin *)
     | line -> (
@@ -303,14 +309,17 @@ let run_both ~step ~n =
   (* Aliases for the two interpolation modules *)
   let module L = Linear in
   let module N = Newton in
+  (* Check if input is from a terminal (interactive) or from a pipe *)
+  let is_interactive = Unix.isatty Unix.stdin in
   (* tail-recursive loop:
      window     : list of recent points (up to n points)
      next_x_opt : next x from which to continue sampling
    *)
   let rec loop window next_x_opt =
     (* Print input prompt to stderr so it does not mix with algorithm output *)
-    output_string stderr "< ";
-    flush stderr;
+    if is_interactive then (
+      output_string stderr "< ";
+      flush stderr);
     match input_line stdin with
     (* Successfully read one line from stdin *)
     | line -> (

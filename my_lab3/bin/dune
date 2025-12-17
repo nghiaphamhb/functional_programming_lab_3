@@ -1,4 +1,4 @@
 (executable
  (public_name my_lab3)
  (name main)
- (libraries my_lab3))
+ (libraries my_lab3 unix))
