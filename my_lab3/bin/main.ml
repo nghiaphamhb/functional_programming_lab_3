@@ -86,96 +86,6 @@ let parse_line (line : string) : Point.t option =
 (** function prints result print_result : string -> float -> float -> unit *)
 let print_result algo_name x y = Printf.printf "> %s: %g %g\n%!" algo_name x y
 
-(** streaming linear interpolation:
-    + Infinite loop reading lines from stdin.
-    + Each line is parsed into a point (x, y).
-    + Keep a sliding window of 2 most recent points (prev_point, curr_point).
-    + When we have 2 points, interpolate from prev_point.x to curr_point.x with
-      the given step.
-    + Print results to stdout.
-    + Then read next point, slide the window, and repeat. run_linear :
-      step:float -> unit *)
-let run_linear ~step =
-  let module A = Linear in
-  (* Check if input is from a terminal (interactive) or from a pipe *)
-  let is_interactive = Unix.isatty Unix.stdin in
-  (* tail-recursive loop:
-     prev_point : previous point in the window (or None)
-     curr_point : current point in the window (or None)
-     next_x_opt : next x at which we should start interpolating
-   *)
-  let rec loop prev_point curr_point next_x_opt =
-    (* Print input prompt to stderr so it does not mix with algorithm output *)
-    if is_interactive then (
-      output_string stderr "< ";
-      flush stderr;
-    );
-    match input_line stdin with
-    (* Successfully read one line from stdin *)
-    | line -> (
-        (* Try to parse line into a point (x, y) *)
-        match parse_line line with
-        | None ->
-            (* Invalid or empty line: skip and continue with the same state *)
-            loop prev_point curr_point next_x_opt
-        | Some p -> (
-            (* Update the sliding window with the new point p *)
-            let prev', curr' =
-              match (prev_point, curr_point) with
-              | None, None ->
-                  (* First point: window has only the new point p *)
-                  (Some p, None)
-              | Some prev, None ->
-                  (* Second point: now window has (prev, p) *)
-                  (Some prev, Some p)
-              | Some _prev, Some curr ->
-                  (* More points: slide window forward: (curr, p) *)
-                  (Some curr, Some p)
-              | None, Some _ ->
-                  (* This state should never happen if logic is correct *)
-                  failwith "Invalid state"
-            in
-            (* If we have 2 points in the window, perform interpolation *)
-            match (prev', curr') with
-            | Some prev, Some curr ->
-                (* Determine the starting x for interpolation:
-                     - if we never interpolated in this segment: start at prev.x
-                     - otherwise: resume from the previously stored next_x
-                   *)
-                let start_x =
-                  match next_x_opt with None -> prev.x | Some x -> x
-                in
-                (* Produce interpolated points from start_x up to curr.x
-                     with the given step. Returns the last x used (just past curr.x).
-                   *)
-                let rec produce x =
-                  if x > curr.x then
-                    (* Stop when x goes beyond the current segment *)
-                    x
-                  else
-                    (* Interpolate at x using the two points [prev; curr] *)
-                    let y = A.eval [ prev; curr ] x in
-                    (* Print result in the required "algo_name: x y" format *)
-                    print_result A.name x y;
-                    (* Move to the next sample point *)
-                    produce (x +. step)
-                in
-                (* Store the next x from which to continue in the next iteration *)
-                let next_x' = Some (produce start_x) in
-                (* Recurse with updated window and next_x *)
-                loop prev' curr' next_x'
-            | _ ->
-                (* Not enough points yet (we only have 0 or 1 point),
-                     just continue reading input.
-                   *)
-                loop prev' curr' next_x_opt))
-    | exception End_of_file ->
-        (* End of input: stop the loop *)
-        ()
-  in
-  (* Initial call: no points, no next_x *)
-  loop None None None
-
 (* Function add 1 element to the end of the list *)
 let append_one x lst = lst @ [ x ]
 
@@ -194,106 +104,6 @@ let last_two lst =
   | a :: b :: _ -> Some (b, a) (* take b first *)
   | _ -> None
 
-(** streaming Newton interpolation with sliding window of n points:
-
-    + Infinite loop reading lines from stdin.
-    + Each line is parsed into a point (x, y).
-    + Keep a sliding window "window" of the last at most n points.
-    + When we have at least n points in the window:
-
-    - Define an x-interval [x_min, x_max] based on the window.
-    - For x from start_x to x_max, with step "step", evaluate the Newton
-      interpolating polynomial built from the n points.
-    - Print results to stdout.
-
-    + Then read the next point, slide the window, and repeat. run_newton :
-      step:float -> n:int -> unit *)
-let run_newton ~step ~n =
-  (* Alias for the Newton interpolation module *)
-  let module A = Newton in
-  (* Check if input is from a terminal (interactive) or from a pipe *)
-  let is_interactive = Unix.isatty Unix.stdin in
-  (* tail-recursive loop:
-     window     : list of recent points (kept to at most n points)
-     next_x_opt : next x from which we should continue interpolation
-   *)
-  let rec loop window next_x_opt =
-    (* Print input prompt to stderr so it does not mix with algorithm output *)
-    if is_interactive then (
-      output_string stderr "< ";
-      flush stderr;
-    );
-    match input_line stdin with
-    (* Successfully read one line from stdin *)
-    | line -> (
-        (* Try to parse the line into a point (x, y) *)
-        match parse_line line with
-        | None ->
-            (* Invalid or empty line: ignore and keep the same state *)
-            loop window next_x_opt
-        | Some p ->
-            (* Add the new point p to the window, 
-                 then trim so that we keep at most n last points. *)
-            let window' =
-              window
-              |> append_one p (* append at the end *)
-              |> trim_last_k n (* keep only the last n points *)
-            in
-            (* If we have at least n points, we can interpolate *)
-            if List.length window' >= n then
-              (* Determine starting x:
-                   - If this is the first time we interpolate in this window,
-                     start at the smallest x in the window (x of the first point).
-                   - Otherwise, continue from the previously stored next_x.
-                 *)
-              let start_x =
-                match next_x_opt with
-                | None -> (
-                    (* start from x of the first point in the window *)
-                    match window' with
-                    | [] -> p.x (* should not happen if length >= n *)
-                    | first :: _ -> first.x)
-                | Some x -> x
-              in
-              (* x_max is the x-coordinate of the last point in the window
-                   (i.e., the right boundary of the interpolation interval). *)
-              let x_max =
-                match List.rev window' with
-                | [] -> p.x (* should not happen if length >= n *)
-                | last :: _ -> last.x
-              in
-              (* Produce interpolated points on [start_x, x_max]
-                   with the given step, using Newton interpolation on n points. *)
-              let rec produce x =
-                if x > x_max then
-                  (* Stop when x goes past the current window interval *)
-                  x
-                else
-                  (* Evaluate Newton polynomial of degree (n-1) at x,
-                       using the n points in window'. *)
-                  let y = A.eval_n n window' x in
-                  (* Print result in "algo_name: x y" format *)
-                  print_result A.name x y;
-                  (* Move to the next sample point *)
-                  produce (x +. step)
-              in
-              (* Store the next x from which we should continue
-                   the next time we enter this window. *)
-              let next_x' = Some (produce start_x) in
-              (* Recurse with updated window and next_x *)
-              loop window' next_x'
-            else
-              (* Not enough points yet (we have less than n),
-                   so we cannot build a Newton interpolating polynomial.
-                   Just continue reading input. *)
-              loop window' next_x_opt)
-    | exception End_of_file ->
-        (* End of input: stop the loop *)
-        ()
-  in
-  (* Initial call: empty window, no next_x yet *)
-  loop [] None
-
 (** streaming both Linear and Newton interpolation on the same input stream:
 
     + Infinite loop reading lines from stdin.
@@ -307,7 +117,7 @@ let run_newton ~step ~n =
 
     + Print both results (Linear + Newton) to stdout when applicable. run_both :
       step:float -> n:int -> unit *)
-let run_both ~step ~n ~use_linear ~use_newton=
+let run_both ~step ~n ~use_linear ~use_newton =
   let module L = Linear in
   let module N = Newton in
   let is_interactive = Unix.isatty Unix.stdin in
@@ -316,13 +126,11 @@ let run_both ~step ~n ~use_linear ~use_newton=
   let rec loop window next_x_opt =
     if is_interactive then (
       output_string stderr "< ";
-      flush stderr;
-    );
+      flush stderr);
     match input_line stdin with
     | line -> (
         match parse_line line with
-        | None ->
-            loop window next_x_opt
+        | None -> loop window next_x_opt
         | Some p ->
             let window' = window |> append_one p |> trim_last_k n in
             let len = List.length window' in
@@ -331,15 +139,11 @@ let run_both ~step ~n ~use_linear ~use_newton=
               let start_x =
                 match next_x_opt with
                 | None -> (
-                    match window' with
-                    | [] -> p.x
-                    | first :: _ -> first.x)
+                    match window' with [] -> p.x | first :: _ -> first.x)
                 | Some x -> x
               in
               let x_max =
-                match List.rev window' with
-                | [] -> p.x 
-                | last :: _ -> last.x
+                match List.rev window' with [] -> p.x | last :: _ -> last.x
               in
               (* === Choose algorithm by label === *)
               let last2 = last_two window' in
@@ -349,20 +153,19 @@ let run_both ~step ~n ~use_linear ~use_newton=
               in
 
               let rec produce x =
-                if x > x_max then
-                  x
+                if x > x_max then x
                 else (
                   (* ----- Linear interpolation part ----- *)
-                  if use_linear then
-                  (match last2 with
-                  | Some (p1, p2) when x >= p1.x && x <= p2.x ->
-                      let y_lin = L.eval [ p1; p2 ] x in
-                      print_result L.name x y_lin
-                  | _ ->
-                      ());
+                  (if use_linear then
+                     match last2 with
+                     | Some (p1, p2) when x >= p1.x && x <= p2.x ->
+                         let y_lin = L.eval [ p1; p2 ] x in
+                         print_result L.name x y_lin
+                     | _ -> ());
 
                   (* ----- Newton interpolation part ----- *)
-                  (if use_newton && has_newton && x >= first_x && x <= x_max then
+                  (if use_newton && has_newton && x >= first_x && x <= x_max
+                   then
                      let y_new = N.eval_n n window' x in
                      print_result N.name x y_new);
 
@@ -371,11 +174,8 @@ let run_both ~step ~n ~use_linear ~use_newton=
               (* Done the loop *)
               let next_x' = Some (produce start_x) in
               loop window' next_x'
-            else
-
-              loop window' next_x_opt)
-    | exception End_of_file ->
-        ()
+            else loop window' next_x_opt)
+    | exception End_of_file -> ()
   in
   loop [] None
 
